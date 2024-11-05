@@ -3,12 +3,12 @@
 
 //pins
 const int shiftDataPin = 11, shiftLatchPin = 12, shiftClockPin = 13;
-const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
-const int transistorSwitchPin = 8;
+const int rs = 2, en2 = 7, en1 = 8, d4 = 3, d5 = 4, d6 = 5, d7 = 6;
 const int bitePin = 9;
 
 //LCD
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+LiquidCrystal lcd2(rs, en2, d4, d5, d6, d7);
+LiquidCrystal lcd1(rs, en1, d4, d5, d6, d7);
 //variables
 int value = 0;
 int values[] = {0,0,0,0};
@@ -25,20 +25,19 @@ void setup() {
   pinMode(shiftDataPin,OUTPUT);
   pinMode(shiftLatchPin,OUTPUT);
   pinMode(shiftClockPin,OUTPUT);
-  pinMode(transistorSwitchPin,OUTPUT);
   pinMode(bitePin,OUTPUT);
 
   //LCD setup
-  digitalWrite(transistorSwitchPin, HIGH);
-  lcd.begin(16, 2);
-  lcd.print("Dinosaur Attacks");
-  lcd.setCursor(0, 1);
-  lcd.print("Today:"); 
-  digitalWrite(transistorSwitchPin, LOW);
-  lcd.setCursor(0, 0);
-  lcd.print("Last attack was:");
-  lcd.setCursor(0, 1);
-  lcd.print("9999 Seconds Ago");
+  delay(100);
+  lcd1.begin(16, 2);
+  lcd1.print("Dinosaur Attacks");
+  lcd1.setCursor(0, 1);
+  lcd1.print("Today:          "); 
+  delay(100);
+  lcd2.begin(16, 2);
+  lcd2.print("Last attack was:");
+  lcd2.setCursor(0, 1);
+  lcd2.print("0 Seconds Ago");
 
 }
 
@@ -71,7 +70,8 @@ void loop() {
   digitalWrite(shiftLatchPin, HIGH);
 
   //LCD updates
-  lcd.print(((millis()-lastBite)%1000) + " Seconds Ago");
+  lcd2.setCursor(0, 1);
+  lcd2.print(String((millis()-lastBite)/1000) + " Seconds Ago   ");
 
   //delay
   delay(5);
