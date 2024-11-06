@@ -3,7 +3,7 @@
 
 //pins
 const int shiftDataPin = 11, shiftLatchPin = 12, shiftClockPin = 13;
-const int rs = 2, en2 = 7, en1 = 8, d4 = 3, d5 = 4, d6 = 5, d7 = 6;
+const int rs = 6, en2 = 7, en1 = 8, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 const int bitePin = 9;
 
 //LCD
