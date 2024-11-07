@@ -9,6 +9,7 @@ const int bitePin = 9;
 //LCD
 LiquidCrystal lcd2(rs, en2, d4, d5, d6, d7);
 LiquidCrystal lcd1(rs, en1, d4, d5, d6, d7);
+
 //variables
 int value = 0;
 int values[] = {0,0,0,0};
@@ -25,14 +26,17 @@ void setup() {
   pinMode(shiftDataPin,OUTPUT);
   pinMode(shiftLatchPin,OUTPUT);
   pinMode(shiftClockPin,OUTPUT);
-  pinMode(bitePin,OUTPUT);
+  pinMode(bitePin,INPUT);
 
   //LCD setup
+  
+  //setup lcd1
   delay(100);
   lcd1.begin(16, 2);
   lcd1.print("Dinosaur Attacks");
   lcd1.setCursor(0, 1);
   lcd1.print("Today:          "); 
+  //setup lcd2
   delay(100);
   lcd2.begin(16, 2);
   lcd2.print("Last attack was:");
@@ -58,18 +62,20 @@ void loop() {
   values[2] = (value % 100)/10;
   values[3] = (value % 10)/1;
   for(int digit=0; digit<4; digit++){
+    //shifting each digit to registers
     digitalWrite(shiftLatchPin, LOW);
     shiftOut(shiftDataPin, shiftClockPin, MSBFIRST, segmentLookup[values[digit]]);
     shiftOut(shiftDataPin, shiftClockPin, MSBFIRST, digitLookup[digit]);
     digitalWrite(shiftLatchPin, HIGH);
     delay(1);
   }
+  //set low to equalise brightness
   digitalWrite(shiftLatchPin, LOW);
   shiftOut(shiftDataPin, shiftClockPin, MSBFIRST, 0);
   shiftOut(shiftDataPin, shiftClockPin, MSBFIRST, digitHigh);
   digitalWrite(shiftLatchPin, HIGH);
 
-  //LCD updates
+  //update timer on lcd 2
   lcd2.setCursor(0, 1);
   lcd2.print(String((millis()-lastBite)/1000) + " Seconds Ago   ");
 
