@@ -16,33 +16,33 @@ const long loopPeriod = 50;
 const float maxDistance = 110;
 const float minDistance = 10;
   //tail
-const int tailmin = 0, tailmax = 90;
+const int tailMin = 0, tailMax = 90;
   //neck
 const int neckMin = 0, neckMax = 90;
-const long baseNeckPeriod = 1000;
+const long baseTailPeriod = 1000;
 
-//variables
+//globals
 float frontDistance = 0;
 float rearDistance = 0;
   //tail
-float tailFrequency = 0;
-float tailAmplitude = 0;
-long tailHighMillis = 0;
-long tailLowMillis = tailHighMillis + baseNeckPeriod/2;
-long tailCurrentPeriod = baseNeckPeriod;
+float tailFrequencyMult = 0;
+float tailAmplitudeMult = 0;
+long tailPeriod = baseTailPeriod;
+int tailAmplitude = 0;
+int tailSteps = tailPeriod/loopPeriod;
+int tailStep = 0;
   //neck
 float neckAngle = 0;
   //eyes
 float brightness = 0;
 
 //behaviours
-float fear = 0
-float aggression = 0
-float curiosity = 0
+float fear = 0;
+float aggression = 0;
+float curiosity = 0;
 
-
+//setups
 void setup() {
-  //setups
   setupTail();
   setupNeck();
   setupJaw();
@@ -50,8 +50,8 @@ void setup() {
   setupMotors();
 }
 
+//main loop
 void loop() {
-  //loops
   loopTail(); //in progress
   loopNeck(); //complete
   loopJaw(); //?
@@ -89,14 +89,25 @@ void setupMotors(){
   pinMode(echoPinF, INPUT); // Sets the echoPin as an INPUT
   pinMode(echoPinR, INPUT); 
 }
+
 //loops
 void loopTail(){
-  setTailParameters();
-  if()
+  //write angle
+  int angle = tailMin + tailAmplitude*(float(abs(tailStep-tailSteps*0.5))/tailSteps);
+  tailServo.write(angle);
 
-
-
+  //recalculate frequency and amplitude each cycle
+  if(tailStep == 0){
+    setTailParameters();
+    tailAmplitude = int((tailMax-tailMin)*tailAmplitudeMult);
+    tailPeriod = baseTailPeriod/tailFrequencyMult;
+    tailPeriod = tailPeriod-(tailPeriod%(2*loopPeriod)); //constrain to even multiples of loop period
+    tailSteps = tailPeriod/loopPeriod;
+  }
+  //increment
+  tailStep = (tailStep+1)%tailSteps;
 }
+
 void loopNeck(){
  if (minDistance < rearDistance && rearDistance < maxDistance / 2) { // Do jack until over half distance
     neckAngle = neckMin;
@@ -121,8 +132,8 @@ void loopEyes(){
   //eyes turn more cyan proportional to curiosity
   //eyes turn more red proportional to aggression
   brightness = (analogRead(ldrPin)/1023.0);
-  analogWrite(redPin,(255*brightness*(1-curiosity)))
-  analogWrite(greenBluePin,(255*brightness*(1-aggression)))
+  analogWrite(redPin,(255*brightness*(1-curiosity)));
+  analogWrite(greenBluePin,(255*brightness*(1-aggression)));
 }
 
 void loopMotors(){
@@ -161,23 +172,23 @@ long ultrasound(int trigger, int echo){
   return(pulseIn(echo, HIGH));
 }
 
-void setTailParameters{
+void setTailParameters(){
   if(fear > curiosity + aggression){
     //frequency = proportional to 1-fear
     //amplitude = proportional to fear
-    tailFrequency = (1-fear)
-    tailAmplitude = fear
+    tailFrequencyMult = (1-fear);
+    tailAmplitudeMult = fear;
   }
   else if(curiosity > aggression + fear){
     //frequency = proportional to curiosity
     //fixed amplitude
-    tailFrequency = curiosity
-    tailAmplitude = 0.5
+    tailFrequencyMult = curiosity;
+    tailAmplitudeMult = 0.5;
   }
   else if(aggression > fear + curiosity){
     //amplitude = proportional to aggression
     //fixed frequency
-    tailFrequency = 0.5
-    tailAmplitude = aggression
+    tailFrequencyMult = 0.5;
+    tailAmplitudeMult = aggression;
   }
 }
