@@ -13,28 +13,47 @@ Servo jawServo;
 
 //constants
 const long loopPeriod = 50;
-const float maxDistance = 110;
-const float minDistance = 10;
+const float maxDistance = 110, minDistance = 10; //rear
+const float maxForwardDistance = 110, minForwardDistance = 10; //front
+  //behaviours and goals
+const float lurchDistance = 60; //rear
+const float retreatThreshold = 40; //rear
+const float curiosityDistance = 50; //front
+  //motors
+const float positionTolerance = 2.5; //tolerance = +-positionTolerance
+
   //tail
 const int tailMin = 0, tailMax = 90;
+const int tailSteps = 20;
   //neck
 const int neckMin = 0, neckMax = 90;
-const long baseTailPeriod = 1000;
+  //jaw
+const int jawOpenAngle = 90;
+const int jawClosedAngle = 0;
 
 //globals
 float frontDistance = 0;
 float rearDistance = 0;
+  //motors
+float desiredPosition = 50;
+float forwardSpeed = 1;
+int goal = 0; /*goals:
+                0: creep
+                1: retreat
+                2: lurch   
+              */
   //tail
-float tailFrequencyMult = 0;
-float tailAmplitudeMult = 0;
-long tailPeriod = baseTailPeriod;
 int tailAmplitude = 0;
-int tailSteps = tailPeriod/loopPeriod;
 int tailStep = 0;
   //neck
 float neckAngle = 0;
   //eyes
 float brightness = 0;
+  //jaw
+long lastBite = -6000;
+bool jawOpen = false;
+bool biteCheck = false;
+
 
 //behaviours
 float fear = 0;
@@ -52,11 +71,11 @@ void setup() {
 
 //main loop
 void loop() {
-  loopTail(); //in progress
-  loopNeck(); //complete
+  loopTail(); //done
+  loopNeck(); //done
   loopJaw(); //?
   loopEyes(); //done
-  loopMotors(); //needs rework
+  loopMotors(); //done?
 
   //constant delay
   delay(loopPeriod-(millis()%loopPeriod));
@@ -92,31 +111,21 @@ void setupMotors(){
 
 //loops
 void loopTail(){
-  //write angle
+  //amplitude proportional to aggression
+  //frequency constant
+  tailAmplitude = int((tailMax-tailMin)*aggression);
   int angle = tailMin + tailAmplitude*(float(abs(tailStep-tailSteps*0.5))/tailSteps);
   tailServo.write(angle);
-
-  //recalculate frequency and amplitude each cycle
-  if(tailStep == 0){
-    setTailParameters();
-    tailAmplitude = int((tailMax-tailMin)*tailAmplitudeMult);
-    tailPeriod = baseTailPeriod/tailFrequencyMult;
-    tailPeriod = tailPeriod-(tailPeriod%(2*loopPeriod)); //constrain to even multiples of loop period
-    tailSteps = tailPeriod/loopPeriod;
-  }
   //increment
   tailStep = (tailStep+1)%tailSteps;
 }
 
 void loopNeck(){
- if (minDistance < rearDistance && rearDistance < maxDistance / 2) { // Do jack until over half distance
-    neckAngle = neckMin;
-  } else if (rearDistance >= maxDistance / 2) { // Incriment Angle until at max dist
-    neckAngle = map(rearDistance, maxDistance / 2, maxDistance, neckMin, neckMax);
+  if(curiosity >= 0.5) { // increase based on curiosity
+    neckAngle = ((curiosity-0.5)*2) * (neckMax-neckMin) + neckMin;
     neckAngle = constrain(neckAngle, neckMin, neckMax); // Constraining just in case
-  } else if (rearDistance > maxDistance) { // More constraining just incase
-    neckAngle = neckMax;
-  } else {
+  }
+  else{
     neckAngle = neckMin;
   }
   //move
@@ -124,7 +133,31 @@ void loopNeck(){
 }
 
 void loopJaw(){
-  
+  if(!bitecheck && millis() >= lastBite+6000){//3 second cooldown
+    return;
+  }
+  //open mouth at max curiosity
+  if(curiosity == 1 && !jawOpen){
+    openJaw();
+  }
+  //wait until tongue is pressed
+  else if(digitalRead(biteInputPin)){
+    //bite down for 3 seconds or until tongue released
+    if(!biteCheck){
+      lastBite = millis();
+      biteCheck = true;
+      closeJaw();
+      digitalWrite(biteOutputPin,HIGH); //update bite counter
+    }
+    else if(millis() >= lastBite+3000 || !digitalRead(biteInputPin)){
+      openJaw();
+      digitalWrite(biteOutputPin,LOW);
+      biteCheck = false;
+    }
+  }
+  else{
+    closeJaw();
+  }
 }
 
 void loopEyes(){
@@ -137,12 +170,57 @@ void loopEyes(){
 }
 
 void loopMotors(){
-  frontDistance = 0.017 * ultrasound(trigPinF,echoPinF);
-  delay(20);
-  rearDistance = 0.017 * ultrasound(trigPinR,echoPinR);
-  delay(20);
-
+  //update distances
+  updateUltrasound(10,0);
   //Behaviours:
+  switch(goal){
+    case 0: //creep forward
+      desiredPosition = maxDistance;
+      forwardSpeed = 0.5;
+      fear = 0; //consult the graph
+      aggression = constrain((frontDistance-curiosityDistance)/(maxForwardDistance-curiosityDistance),1,0)
+      curiosity = constrain(1-aggression,1,0)
+
+
+      //only update goals when creeping
+      if(frontDistance < minForwardDistance){
+        if(rearDistance => retreatThreshold){
+          goal = 1; //retreat
+          fear = 1;
+        }
+        else{
+          goal = 2; //lurch
+          aggression = 1;
+        }
+      }
+      break;
+
+    case 1: //retreat back
+      forwardSpeed = 1;
+      desiredPosition = minDistance;
+      if(rearDistance <= minDistance + positionTolerance){
+        goal = 0; //return to creeping when position achieved
+      }
+      break;
+
+    case 2: //lurch forward
+      desiredPosition = lurchDistance;
+      forwardSpeed = 1;
+      if(rearDistance >= minDistance - positionTolerance){
+        goal = 0; //return to creeping when position achieved
+      }
+      break;
+
+    default: //just incase
+      goal = 0;
+      break;
+  }
+  //update move
+  move();
+
+
+
+  /* legacy
   //In the case the dinosaur is 'cornered', it'll lurch forward as if threatened
   if(frontDistance < 20 && rearDistance < 20){
     digitalWrite(forwardPin, HIGH);
@@ -158,7 +236,14 @@ void loopMotors(){
     digitalWrite(forwardPin, LOW);
     digitalWrite(backwardPin, HIGH);
   }
+  */
+}
 
+void updateUltrasound(int delay1, int delay2){
+  frontDistance = 0.017 * ultrasound(trigPinF,echoPinF);
+  delay(delay1);
+  rearDistance = 0.017 * ultrasound(trigPinR,echoPinR);
+  delay(delay2);
 }
 
 long ultrasound(int trigger, int echo){
@@ -172,23 +257,44 @@ long ultrasound(int trigger, int echo){
   return(pulseIn(echo, HIGH));
 }
 
-void setTailParameters(){
-  if(fear > curiosity + aggression){
-    //frequency = proportional to 1-fear
-    //amplitude = proportional to fear
-    tailFrequencyMult = (1-fear);
-    tailAmplitudeMult = fear;
+void move(){
+  float localDesiredPosition = desiredPosition;
+  //clamp input
+  if(localDesiredPosition>maxDistance){
+    localDesiredPosition = maxDistance;
   }
-  else if(curiosity > aggression + fear){
-    //frequency = proportional to curiosity
-    //fixed amplitude
-    tailFrequencyMult = curiosity;
-    tailAmplitudeMult = 0.5;
+  else if(localDesiredPosition<minDistance){
+    localDesiredPosition = minDistance;
   }
-  else if(aggression > fear + curiosity){
-    //amplitude = proportional to aggression
-    //fixed frequency
-    tailFrequencyMult = 0.5;
-    tailAmplitudeMult = aggression;
+
+  //forwards
+  if(localDesiredPosition < (rearDistance - positionTolerance)){
+    digitalWrite(backwardPin, LOW);
+    analogWrite(forwardPin, int(255*forwardSpeed));
+  }
+  //backwards
+  else if(localDesiredPosition > (rearDistance + positionTolerance)){
+    digitalWrite(forwardPin, LOW);
+    digitalWrite(backwardPin, HIGH);
+  }
+  //no movement
+  else{
+    stop();
   }
 }
+
+void stop(){
+  digitalWrite(forwardPin, LOW);
+  digitalWrite(backwardPin, LOW);
+}
+
+void openJaw(){
+  jawOpen = true;
+  jawServo.write(jawOpenAngle);
+}
+
+void closeJaw(){
+  jawOpen = false;
+  jawServo.write(jawClosedAngle);
+}
+
