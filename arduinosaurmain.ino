@@ -4,7 +4,7 @@
 //pins
 const int trigPinF = 13, trigPinR = 12, jawPin = 11, neckPin = 10, tailPin = 9, echoPinF = 8, 
 echoPinR = 7, redPin = 6, greenBluePin = 5, backwardPin = 4, forwardPin = 3, biteOutputPin = 2;
-const int ldrPin = A0, biteInputPin = A1;
+const int biteInputPin = A0;
 
 //servos
 Servo tailServo;
@@ -73,9 +73,9 @@ void setup() {
 void loop() {
   loopTail(); //done
   loopNeck(); //done
-  loopJaw(); //?
+  loopJaw(); //done
   loopEyes(); //done
-  loopMotors(); //done?
+  loopMotors(); //done
 
   //constant delay
   delay(loopPeriod-(millis()%loopPeriod));
@@ -97,7 +97,6 @@ void setupJaw(){
 void setupEyes(){
   pinMode(redPin, OUTPUT);
   pinMode(greenBluePin, OUTPUT);
-  pinMode(ldrPin, INPUT);
 }
 
 void setupMotors(){
@@ -121,6 +120,10 @@ void loopTail(){
 }
 
 void loopNeck(){
+  if(biteCheck){
+    return; //change nothing if biting
+  }
+
   if(curiosity >= 0.5) { // increase based on curiosity
     neckAngle = ((curiosity-0.5)*2) * (neckMax-neckMin) + neckMin;
     neckAngle = constrain(neckAngle, neckMin, neckMax); // Constraining just in case
@@ -132,12 +135,12 @@ void loopNeck(){
   neckServo.write(neckAngle);
 }
 
-void loopJaw(){
-  if(!bitecheck && millis() >= lastBite+6000){//3 second cooldown
+void loopJaw(){//completely wrong
+  if(!biteCheck && millis() >= lastBite+6000){//3 second cooldown
     return;
   }
   //open mouth at max curiosity
-  if(curiosity == 1 && !jawOpen){
+  if(curiosity >= 1 && !biteCheck){
     openJaw();
   }
   //wait until tongue is pressed
@@ -149,22 +152,20 @@ void loopJaw(){
       closeJaw();
       digitalWrite(biteOutputPin,HIGH); //update bite counter
     }
-    else if(millis() >= lastBite+3000 || !digitalRead(biteInputPin)){
+    if(millis() >= lastBite+3000 || !digitalRead(biteInputPin)){
       openJaw();
       digitalWrite(biteOutputPin,LOW);
       biteCheck = false;
     }
   }
-  else{
+  else{ //close otherwise
     closeJaw();
   }
 }
 
 void loopEyes(){
-  //led brightness proportional to environment brightness
   //eyes turn more cyan proportional to curiosity
   //eyes turn more red proportional to aggression
-  brightness = (analogRead(ldrPin)/1023.0);
   analogWrite(redPin,(255*brightness*(1-curiosity)));
   analogWrite(greenBluePin,(255*brightness*(1-aggression)));
 }
@@ -178,19 +179,31 @@ void loopMotors(){
       desiredPosition = maxDistance;
       forwardSpeed = 0.5;
       fear = 0; //consult the graph
-      aggression = constrain((frontDistance-curiosityDistance)/(maxForwardDistance-curiosityDistance),1,0)
-      curiosity = constrain(1-aggression,1,0)
+      aggression = constrain((frontDistance-curiosityDistance)/(maxForwardDistance-curiosityDistance),1,0);
+      curiosity = constrain(1-aggression,1,0);
 
+      //set aggression to max when biting
+      if(biteCheck){
+          aggression = 1;
+          fear = 0;
+          curiosity = 0;
+          stop();
+          return;
+      }
 
       //only update goals when creeping
       if(frontDistance < minForwardDistance){
-        if(rearDistance => retreatThreshold){
+        if(rearDistance >= retreatThreshold){
           goal = 1; //retreat
           fear = 1;
+          aggression = 0;
+          curiosity = 0;
         }
         else{
           goal = 2; //lurch
           aggression = 1;
+          fear = 0;
+          curiosity = 0;
         }
       }
       break;
@@ -217,29 +230,10 @@ void loopMotors(){
   }
   //update move
   move();
-
-
-
-  /* legacy
-  //In the case the dinosaur is 'cornered', it'll lurch forward as if threatened
-  if(frontDistance < 20 && rearDistance < 20){
-    digitalWrite(forwardPin, HIGH);
-    digitalWrite(backwardPin, LOW);
-  }
-  //Or gate to move forward if curious, or if being approached from behind
-  else if(frontDistance > 20 || rearDistance < 20){
-    digitalWrite(forwardPin, HIGH);
-    digitalWrite(backwardPin, LOW);
-  }
- //Backs off if too close but space to flee (and gate not needed as firs if statement cover this)
-  else if(frontDistance < 20){ 
-    digitalWrite(forwardPin, LOW);
-    digitalWrite(backwardPin, HIGH);
-  }
-  */
 }
 
 void updateUltrasound(int delay1, int delay2){
+  //updates both distances with a given delay between triggers
   frontDistance = 0.017 * ultrasound(trigPinF,echoPinF);
   delay(delay1);
   rearDistance = 0.017 * ultrasound(trigPinR,echoPinR);
@@ -259,6 +253,7 @@ long ultrasound(int trigger, int echo){
 
 void move(){
   float localDesiredPosition = desiredPosition;
+
   //clamp input
   if(localDesiredPosition>maxDistance){
     localDesiredPosition = maxDistance;
@@ -284,16 +279,19 @@ void move(){
 }
 
 void stop(){
+  //stops all movement
   digitalWrite(forwardPin, LOW);
   digitalWrite(backwardPin, LOW);
 }
 
 void openJaw(){
+  //opens jaw
   jawOpen = true;
   jawServo.write(jawOpenAngle);
 }
 
 void closeJaw(){
+  //closes jaw
   jawOpen = false;
   jawServo.write(jawClosedAngle);
 }
