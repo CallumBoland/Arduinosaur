@@ -3,7 +3,7 @@
 
 //pins
 const int trigPin = 12, jawPin = 11, neckPin = 10, tailPin = 9, echoPin = 7, redPin = 6, greenPin =5, bluePin = 3, biteOutputPin = 2;
-const int biteInputPin = A0;
+const int biteInputPin = 4;
 
 //servos
 Servo tailServo;
@@ -11,7 +11,7 @@ Servo neckServo;
 Servo jawServo;
 
 //constants
-const long loopPeriod = 50;
+const long loopPeriod = 500;
 const float maxForwardDistance = 70, minForwardDistance = 10; //front
   //behaviours and goals
 const float curiosityDistance = 50; //front
@@ -19,11 +19,11 @@ const float curiosityDistance = 50; //front
 //gone
   //tail
 const int tailMin = 0, tailMax = 70;
-const long tailPeriod = 1000;
+const long tailPeriod = 10000;
 const int tailSteps = tailPeriod/loopPeriod;
   //neck
-const int neckMin = 120, neckMax = 90;
-const int neckFearAngle = 135;
+const int neckMin = 30, neckMax = 40;
+const int neckFearAngle = 45;
   //jaw
 const int jawOpenAngle = 0;
 const int jawClosedAngle = 180;
@@ -82,6 +82,8 @@ void setupNeck(){
 
 void setupJaw(){
   jawServo.attach(jawPin);
+  pinMode(biteInputPin,INPUT);
+  digitalWrite(biteInputPin,HIGH);
 }
 
 void setupEyes(){
@@ -130,19 +132,21 @@ void loopJaw(){
     return;
   }
   //open mouth at max curiosity
-  if(curiosity >= 1 && !biteCheck){
-    openJaw();
-  }
-  //wait until tongue is pressed
-  else if(digitalRead(biteInputPin)){
-    //bite down for 3 seconds or until tongue released
+  if(curiosity >= 1){
     if(!biteCheck){
-      lastBite = millis();
-      biteCheck = true;
-      closeJaw();
-      digitalWrite(biteOutputPin,HIGH); //update bite counter
+      openJaw();
     }
-    if(millis() >= lastBite+3000 || !digitalRead(biteInputPin)){
+    //wait until tongue is pressed
+    else if(digitalRead(biteInputPin)){
+      //bite down for 3 seconds if not already biting
+      if(!biteCheck){
+        lastBite = millis();
+        biteCheck = true;
+        closeJaw();
+        digitalWrite(biteOutputPin,HIGH); //update bite counter
+      }
+    }//release bite if biting for more than 3 seconds
+    else if(millis() >= lastBite+3000){
       openJaw();
       digitalWrite(biteOutputPin,LOW);
       biteCheck = false;
