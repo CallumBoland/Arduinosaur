@@ -2,8 +2,7 @@
 #include <Servo.h>
 
 //pins
-const int trigPinF = 13, trigPinR = 12, jawPin = 11, neckPin = 10, tailPin = 9, echoPinF = 8, 
-echoPinR = 7, redPin = 6, greenBluePin = 5, backwardPin = 4, forwardPin = 3, biteOutputPin = 2;
+const int trigPin = 12, jawPin = 11, neckPin = 10, tailPin = 9, echoPin = 7, redPin = 6, greenPin =5, bluePin = 3, biteOutputPin = 2;
 const int biteInputPin = A0;
 
 //servos
@@ -13,42 +12,31 @@ Servo jawServo;
 
 //constants
 const long loopPeriod = 50;
-const float maxDistance = 110, minDistance = 10; //rear
-const float maxForwardDistance = 110, minForwardDistance = 10; //front
+const float maxForwardDistance = 70, minForwardDistance = 10; //front
   //behaviours and goals
-const float lurchDistance = 60; //rear
-const float retreatThreshold = 40; //rear
 const float curiosityDistance = 50; //front
   //motors
-const float positionTolerance = 2.5; //tolerance = +-positionTolerance
 
   //tail
-const int tailMin = 0, tailMax = 90;
+const int tailMin = 0, tailMax = 70;
 const int tailSteps = 20;
   //neck
-const int neckMin = 0, neckMax = 90;
+const int neckMin = 120, neckMax = 90;
+const int neckFearAngle = 135;
   //jaw
-const int jawOpenAngle = 90;
-const int jawClosedAngle = 0;
+const int jawOpenAngle = 0;
+const int jawClosedAngle = 180;
 
 //globals
 float frontDistance = 0;
-float rearDistance = 0;
   //motors
-float desiredPosition = 50;
-float forwardSpeed = 1;
-int goal = 0; /*goals:
-                0: creep
-                1: retreat
-                2: lurch   
-              */
+//gone
   //tail
 int tailAmplitude = 0;
 int tailStep = 0;
   //neck
 float neckAngle = 0;
   //eyes
-float brightness = 0;
   //jaw
 long lastBite = -6000;
 bool jawOpen = false;
@@ -56,7 +44,7 @@ bool biteCheck = false;
 
 
 //behaviours
-float fear = 0;
+bool fear = false;
 float aggression = 0;
 float curiosity = 0;
 
@@ -96,16 +84,13 @@ void setupJaw(){
 
 void setupEyes(){
   pinMode(redPin, OUTPUT);
-  pinMode(greenBluePin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
 }
 
 void setupMotors(){
-  pinMode(forwardPin, OUTPUT); 
-  pinMode(backwardPin, OUTPUT);
-  pinMode(trigPinF, OUTPUT); // Sets the trigPin as an OUTPUT
-  pinMode(trigPinR, OUTPUT); 
-  pinMode(echoPinF, INPUT); // Sets the echoPin as an INPUT
-  pinMode(echoPinR, INPUT); 
+  pinMode(trigPin, OUTPUT); // Sets the trigPin as an OUTPUT 
+  pinMode(echoPin, INPUT); // Sets the echoPin as an INPUT
 }
 
 //loops
@@ -124,7 +109,10 @@ void loopNeck(){
     return; //change nothing if biting
   }
 
-  if(curiosity >= 0.5) { // increase based on curiosity
+  if(fear){
+    neckAngle = neckFearAngle;
+  }
+  else if(curiosity >= 0.5) { // increase based on curiosity
     neckAngle = ((curiosity-0.5)*2) * (neckMax-neckMin) + neckMin;
     neckAngle = constrain(neckAngle, neckMin, neckMax); // Constraining just in case
   }
@@ -166,78 +154,60 @@ void loopJaw(){//completely wrong
 void loopEyes(){
   //eyes turn more cyan proportional to curiosity
   //eyes turn more red proportional to aggression
-  analogWrite(redPin,(255*brightness*(1-curiosity)));
-  analogWrite(greenBluePin,(255*brightness*(1-aggression)));
+  //eyes turn magenta when in fear
+  if(fear){
+    //magenta
+    analogWrite(redPin,76);
+    analogWrite(greenPin,0);
+    analogWrite(bluePin,196);
+  }
+  else{
+    //
+    analogWrite(redPin,(255*(1-curiosity)));
+    //red
+    analogWrite(greenPin,(255*(1-aggression)));
+    analogWrite(bluePin,(255*(1-aggression)));
+  }
 }
 
-void loopMotors(){
+void loopMotors(){//no more motors lol
   //update distances
-  updateUltrasound(10,0);
+  updateUltrasound();
   //Behaviours:
-  switch(goal){
-    case 0: //creep forward
-      desiredPosition = maxDistance;
-      forwardSpeed = 0.5;
-      fear = 0; //consult the graph
-      aggression = constrain((frontDistance-curiosityDistance)/(maxForwardDistance-curiosityDistance),1,0);
-      curiosity = constrain(1-aggression,1,0);
-
-      //set aggression to max when biting
-      if(biteCheck){
-          aggression = 1;
-          fear = 0;
-          curiosity = 0;
-          stop();
-          return;
-      }
-
-      //only update goals when creeping
-      if(frontDistance < minForwardDistance){
-        if(rearDistance >= retreatThreshold){
-          goal = 1; //retreat
-          fear = 1;
-          aggression = 0;
-          curiosity = 0;
+  if(frontDistance>=minForwardDistance){
+      //aggression and curiosity
+      if(frontDistance >= curiosityDistance && frontDistance <= maxForwardDistance){
+        if(frontDistance > (curiosityDistance + maxForwardDistance)/2){
+          aggression = constrain((frontDistance-curiosityDistance)/((curiosityDistance + maxForwardDistance)/2),1,0);
+          curiosity = constrain(1-aggression,1,0);
         }
         else{
-          goal = 2; //lurch
-          aggression = 1;
-          fear = 0;
+          aggression = 1-constrain((frontDistance-(curiosityDistance + maxForwardDistance)/2)/((curiosityDistance + maxForwardDistance)/2),1,0);
           curiosity = 0;
         }
       }
-      break;
-
-    case 1: //retreat back
-      forwardSpeed = 1;
-      desiredPosition = minDistance;
-      if(rearDistance <= minDistance + positionTolerance){
-        goal = 0; //return to creeping when position achieved
+      else if(frontDistance < curiosityDistance){
+        aggression = 0;
+        curiosity = 1;
       }
-      break;
-
-    case 2: //lurch forward
-      desiredPosition = lurchDistance;
-      forwardSpeed = 1;
-      if(rearDistance >= minDistance - positionTolerance){
-        goal = 0; //return to creeping when position achieved
+      else{
+        aggression = 0;
+        curiosity = 0;
       }
-      break;
-
-    default: //just incase
-      goal = 0;
-      break;
+      //curiosity
+      fear = false;
   }
-  //update move
-  move();
+  else{
+    aggression = 0;
+    curiosity = 0;
+    fear = true;
+  }
+
 }
 
-void updateUltrasound(int delay1, int delay2){
-  //updates both distances with a given delay between triggers
-  frontDistance = 0.017 * ultrasound(trigPinF,echoPinF);
-  delay(delay1);
-  rearDistance = 0.017 * ultrasound(trigPinR,echoPinR);
-  delay(delay2);
+void updateUltrasound(){
+  //updates proximity
+  frontDistance = 0.017 * ultrasound(trigPin,echoPin);
 }
 
 long ultrasound(int trigger, int echo){
@@ -249,39 +219,6 @@ long ultrasound(int trigger, int echo){
   digitalWrite(trigger, LOW);
   // Reads the echoPin, returns the sound wave travel time in microseconds
   return(pulseIn(echo, HIGH));
-}
-
-void move(){
-  float localDesiredPosition = desiredPosition;
-
-  //clamp input
-  if(localDesiredPosition>maxDistance){
-    localDesiredPosition = maxDistance;
-  }
-  else if(localDesiredPosition<minDistance){
-    localDesiredPosition = minDistance;
-  }
-
-  //forwards
-  if(localDesiredPosition < (rearDistance - positionTolerance)){
-    digitalWrite(backwardPin, LOW);
-    analogWrite(forwardPin, int(255*forwardSpeed));
-  }
-  //backwards
-  else if(localDesiredPosition > (rearDistance + positionTolerance)){
-    digitalWrite(forwardPin, LOW);
-    digitalWrite(backwardPin, HIGH);
-  }
-  //no movement
-  else{
-    stop();
-  }
-}
-
-void stop(){
-  //stops all movement
-  digitalWrite(forwardPin, LOW);
-  digitalWrite(backwardPin, LOW);
 }
 
 void openJaw(){
