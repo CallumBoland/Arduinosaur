@@ -16,10 +16,11 @@ const float maxForwardDistance = 70, minForwardDistance = 10; //front
   //behaviours and goals
 const float curiosityDistance = 50; //front
   //motors
-
+//gone
   //tail
 const int tailMin = 0, tailMax = 70;
-const int tailSteps = 20;
+const long tailPeriod = 1000;
+const int tailSteps = tailPeriod/loopPeriod;
   //neck
 const int neckMin = 120, neckMax = 90;
 const int neckFearAngle = 135;
@@ -37,6 +38,7 @@ int tailStep = 0;
   //neck
 float neckAngle = 0;
   //eyes
+//none
   //jaw
 long lastBite = -6000;
 bool jawOpen = false;
@@ -48,7 +50,7 @@ bool fear = false;
 float aggression = 0;
 float curiosity = 0;
 
-//setups
+//setup
 void setup() {
   setupTail();
   setupNeck();
@@ -89,8 +91,8 @@ void setupEyes(){
 }
 
 void setupMotors(){
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an OUTPUT 
-  pinMode(echoPin, INPUT); // Sets the echoPin as an INPUT
+  pinMode(trigPin, OUTPUT); // Sets the trigPin as OUTPUT 
+  pinMode(echoPin, INPUT); // Sets the echoPin as INPUT
 }
 
 //loops
@@ -109,21 +111,21 @@ void loopNeck(){
     return; //change nothing if biting
   }
 
-  if(fear){
+  if(fear){ //fear response in neck
     neckAngle = neckFearAngle;
   }
-  else if(curiosity >= 0.5) { // increase based on curiosity
+  else if(curiosity >= 0.5) { // lean down based on curiosity
     neckAngle = ((curiosity-0.5)*2) * (neckMax-neckMin) + neckMin;
     neckAngle = constrain(neckAngle, neckMin, neckMax); // Constraining just in case
   }
-  else{
+  else{ //otherwise
     neckAngle = neckMin;
   }
   //move
   neckServo.write(neckAngle);
 }
 
-void loopJaw(){//completely wrong
+void loopJaw(){
   if(!biteCheck && millis() >= lastBite+6000){//3 second cooldown
     return;
   }
@@ -154,17 +156,17 @@ void loopJaw(){//completely wrong
 void loopEyes(){
   //eyes turn more cyan proportional to curiosity
   //eyes turn more red proportional to aggression
-  //eyes turn magenta when in fear
+  //eyes turn purple for fear
   if(fear){
-    //magenta
+    //purple 
     analogWrite(redPin,76);
     analogWrite(greenPin,0);
     analogWrite(bluePin,196);
   }
   else{
-    //
+    //redness
     analogWrite(redPin,(255*(1-curiosity)));
-    //red
+    //cyanness
     analogWrite(greenPin,(255*(1-aggression)));
     analogWrite(bluePin,(255*(1-aggression)));
   }
@@ -176,6 +178,11 @@ void loopMotors(){//no more motors lol
   //Behaviours:
   if(frontDistance>=minForwardDistance){
       //aggression and curiosity
+      /*consult the graph:
+      aggression:____/\_
+       curiosity:_|⎺⎺\__
+            fear:⎺|_____
+      */
       if(frontDistance >= curiosityDistance && frontDistance <= maxForwardDistance){
         if(frontDistance > (curiosityDistance + maxForwardDistance)/2){
           aggression = constrain((frontDistance-curiosityDistance)/((curiosityDistance + maxForwardDistance)/2),1,0);
@@ -194,9 +201,8 @@ void loopMotors(){//no more motors lol
         aggression = 0;
         curiosity = 0;
       }
-      //curiosity
       fear = false;
-  }
+  }//fear point
   else{
     aggression = 0;
     curiosity = 0;
