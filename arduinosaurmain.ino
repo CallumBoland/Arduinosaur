@@ -2,8 +2,8 @@
 #include <Servo.h>
 
 //pins
-const int trigPin = 12, jawPin = 11, neckPin = 10, tailPin = 9, echoPin = 7, redPin = 6, greenPin =5, bluePin = 3, biteOutputPin = 2;
-const int biteInputPin = 4;
+const int trigPin = 12, jawPin = 11, neckPin = 10, tailPin = 9, echoPin = 7, redPin = 6, greenPin =5, bluePin = 3;
+const int biteInputPin = 4, biteOutputPin = 2;
 
 //servos
 Servo tailServo;
@@ -11,19 +11,21 @@ Servo neckServo;
 Servo jawServo;
 
 //constants
-const long loopPeriod = 500;
-const float maxForwardDistance = 70, minForwardDistance = 10; //front
+const long loopPeriod = 200;
+const float maxForwardDistance = 112, minForwardDistance = 12; //front
   //behaviours and goals
-const float curiosityDistance = 50; //front
+const float curiosityDistance = 42; //front
   //motors
 //gone
   //tail
-const int tailMin = 0, tailMax = 70;
-const long tailPeriod = 10000;
+const int tailMin = 60, tailMax = 15;
+const int tailFearAngle = 0;
+const long tailPeriod = 2000;
 const int tailSteps = tailPeriod/loopPeriod;
   //neck
-const int neckMin = 30, neckMax = 40;
-const int neckFearAngle = 45;
+const int neckLow = 20, neckHigh = 50;
+const int neckFearAngle = 55;
+const int neckSteps = 6;
   //jaw
 const int jawOpenAngle = 0;
 const int jawClosedAngle = 180;
@@ -37,6 +39,7 @@ int tailAmplitude = 0;
 int tailStep = 0;
   //neck
 float neckAngle = 0;
+int neckStep = 0;
   //eyes
 //none
   //jaw
@@ -52,6 +55,7 @@ float curiosity = 0;
 
 //setup
 void setup() {
+  Serial.begin(9600); //for testing
   setupTail();
   setupNeck();
   setupJaw();
@@ -67,6 +71,10 @@ void loop() {
   loopEyes(); //done
   loopMotors(); //done
 
+  Serial.println(frontDistance);
+  Serial.println(digitalRead(biteInputPin));
+
+
   //constant delay
   delay(loopPeriod-(millis()%loopPeriod));
 }
@@ -74,14 +82,18 @@ void loop() {
 //setups
 void setupTail(){
   tailServo.attach(tailPin);
+  tailServo.write(tailMin);
 }
 
 void setupNeck(){
   neckServo.attach(neckPin);
+  neckServo.write(neckHigh);
 }
 
 void setupJaw(){
   jawServo.attach(jawPin);
+  closeJaw();
+  pinMode(biteOutputPin,OUTPUT);
   pinMode(biteInputPin,INPUT);
   digitalWrite(biteInputPin,HIGH);
 }
@@ -101,6 +113,10 @@ void setupMotors(){
 void loopTail(){
   //amplitude proportional to aggression
   //frequency constant
+  if(fear){
+    tailServo.write(tailFearAngle);
+    return;
+  }
   tailAmplitude = int((tailMax-tailMin)*aggression);
   int angle = tailMin + tailAmplitude*(float(abs(tailStep-tailSteps*0.5))/tailSteps);
   tailServo.write(angle);
@@ -109,47 +125,46 @@ void loopTail(){
 }
 
 void loopNeck(){
+
   if(biteCheck){
     return; //change nothing if biting
   }
 
   if(fear){ //fear response in neck
+    neckStep = -5;
     neckAngle = neckFearAngle;
   }
-  else if(curiosity >= 0.5) { // lean down based on curiosity
-    neckAngle = ((curiosity-0.5)*2) * (neckMax-neckMin) + neckMin;
-    neckAngle = constrain(neckAngle, neckMin, neckMax); // Constraining just in case
-  }
-  else{ //otherwise
-    neckAngle = neckMin;
+  else{ //discrete steps in angle
+    neckAngle = neckStepping(curiosity);
   }
   //move
   neckServo.write(neckAngle);
 }
 
 void loopJaw(){
-  if(!biteCheck && millis() >= lastBite+6000){//3 second cooldown
+  if(!biteCheck && millis() <= lastBite+6000){//3 second cooldown
     return;
   }
   //open mouth at max curiosity
-  if(curiosity >= 1){
+  if(neckStep == neckSteps-1 || biteCheck){
     if(!biteCheck){
       openJaw();
-    }
     //wait until tongue is pressed
-    else if(digitalRead(biteInputPin)){
+      if(digitalRead(biteInputPin)){
       //bite down for 3 seconds if not already biting
-      if(!biteCheck){
         lastBite = millis();
         biteCheck = true;
         closeJaw();
         digitalWrite(biteOutputPin,HIGH); //update bite counter
       }
-    }//release bite if biting for more than 3 seconds
-    else if(millis() >= lastBite+3000){
-      openJaw();
-      digitalWrite(biteOutputPin,LOW);
-      biteCheck = false;
+    }
+    else{
+      //release bite if biting for more than 3 seconds
+      if(millis() >= lastBite+3000){
+        openJaw();
+        digitalWrite(biteOutputPin,LOW);
+        biteCheck = false;
+      }
     }
   }
   else{ //close otherwise
@@ -169,10 +184,10 @@ void loopEyes(){
   }
   else{
     //redness
-    analogWrite(redPin,(255*(1-curiosity)));
+    analogWrite(redPin,(255*(aggression)));
     //cyanness
-    analogWrite(greenPin,(255*(1-aggression)));
-    analogWrite(bluePin,(255*(1-aggression)));
+    analogWrite(greenPin,(255*(curiosity)));
+    analogWrite(bluePin,(255*(curiosity)));
   }
 }
 
@@ -188,12 +203,16 @@ void loopMotors(){//no more motors lol
             fear:⎺|_____
       */
       if(frontDistance >= curiosityDistance && frontDistance <= maxForwardDistance){
-        if(frontDistance > (curiosityDistance + maxForwardDistance)/2){
-          aggression = constrain((frontDistance-curiosityDistance)/((curiosityDistance + maxForwardDistance)/2),1,0);
-          curiosity = constrain(1-aggression,1,0);
+        float range = maxForwardDistance-curiosityDistance;
+        if(frontDistance <= (curiosityDistance+range/2)){
+          aggression = (frontDistance-curiosityDistance)/(range/2);
+          aggression = constrain(aggression,0,1);
+          curiosity = 1-aggression;
+          curiosity = constrain(curiosity,0,1);
         }
         else{
-          aggression = 1-constrain((frontDistance-(curiosityDistance + maxForwardDistance)/2)/((curiosityDistance + maxForwardDistance)/2),1,0);
+          aggression = 1-((frontDistance-(curiosityDistance + range/2))/(range/2));
+          aggression = constrain(aggression,0,1);
           curiosity = 0;
         }
       }
@@ -202,10 +221,10 @@ void loopMotors(){//no more motors lol
         curiosity = 1;
       }
       else{
+        fear = false;
         aggression = 0;
         curiosity = 0;
       }
-      fear = false;
   }//fear point
   else{
     aggression = 0;
@@ -243,3 +262,21 @@ void closeJaw(){
   jawServo.write(jawClosedAngle);
 }
 
+int neckStepping(float c){
+  if(c>=0.5){
+    if(c>=0.5+(0.5/(neckSteps-1))*(neckStep+1)){
+      neckStep+=1;
+    }
+    else if(c<=0.5+(0.5/(neckSteps-1))*(neckStep-1)){
+      neckStep+=-1;
+    }
+    neckStep = constrain(neckStep,-5,neckSteps-1);
+    return(neckHigh-(neckHigh-neckLow)*(neckStep/(neckSteps-1.0)));
+  }
+  else{
+    return(neckHigh);
+  }
+
+
+
+}
