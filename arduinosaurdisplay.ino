@@ -26,10 +26,9 @@ void setup() {
   pinMode(shiftDataPin,OUTPUT);
   pinMode(shiftLatchPin,OUTPUT);
   pinMode(shiftClockPin,OUTPUT);
-  pinMode(bitePin,INPUT);
+  pinMode(bitePin,OUTPUT);
 
   //LCD setup
-  
   //setup lcd1
   delay(100);
   lcd1.begin(16, 2);
@@ -52,11 +51,12 @@ void loop() {
     lastBite = millis();
     biteCheck = true;
   }
-  else if(!digitalRead(bitePin) && biteCheck){
+  else if(!digitalRead(bitePin) && biteCheck && millis()>=(lastBite+5000)){
     biteCheck = false;
   }
 
   //seven segment update
+  //digit splitting
   values[0] = (value % 10000)/1000;
   values[1] = (value % 1000)/100;
   values[2] = (value % 100)/10;
