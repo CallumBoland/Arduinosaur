@@ -20,11 +20,11 @@ const float curiosityDistance = 42; //front
   //tail
 const int tailMin = 60, tailMax = 15;
 const int tailFearAngle = 0;
-const long tailPeriod = 2000;
+const long tailPeriod = 1000;
 const int tailSteps = tailPeriod/loopPeriod;
   //neck
 const int neckLow = 20, neckHigh = 50;
-const int neckFearAngle = 55;
+const int neckFearAngle = 60;
 const int neckSteps = 6;
   //jaw
 const int jawOpenAngle = 0;
@@ -55,7 +55,7 @@ float curiosity = 0;
 
 //setup
 void setup() {
-  Serial.begin(9600); //for testing
+  //Serial.begin(9600); //for testing
   setupTail();
   setupNeck();
   setupJaw();
@@ -71,8 +71,8 @@ void loop() {
   loopEyes(); //done
   loopMotors(); //done
 
-  Serial.println(frontDistance);
-  Serial.println(digitalRead(biteInputPin));
+  //Serial.println(frontDistance);
+  //Serial.println(digitalRead(biteInputPin));
 
 
   //constant delay
@@ -263,20 +263,12 @@ void closeJaw(){
 }
 
 int neckStepping(float c){
-  if(c>=0.5){
-    if(c>=0.5+(0.5/(neckSteps-1))*(neckStep+1)){
-      neckStep+=1;
-    }
-    else if(c<=0.5+(0.5/(neckSteps-1))*(neckStep-1)){
-      neckStep+=-1;
-    }
-    neckStep = constrain(neckStep,-5,neckSteps-1);
-    return(neckHigh-(neckHigh-neckLow)*(neckStep/(neckSteps-1.0)));
+  if(c>=0.5+(0.5/(neckSteps-1))*(neckStep+1)){
+    neckStep+=1;
   }
-  else{
-    return(neckHigh);
+  else if(c<=0.5+(0.5/(neckSteps-1))*(neckStep-1)){
+    neckStep+=-1;
   }
-
-
-
+  neckStep = constrain(neckStep,0,neckSteps-1);
+  return(neckHigh-(neckHigh-neckLow)*(neckStep/(neckSteps-1.0)));
 }
